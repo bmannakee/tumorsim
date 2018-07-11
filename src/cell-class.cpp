@@ -1,10 +1,13 @@
-// [[Rcpp::depends(BH)]]
+
 #include <Rcpp.h>
-#include <boost>
+#include <boost/random.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
 #include <random>
 #include <array>
+// [[Rcpp::depends(BH)]]
 using namespace Rcpp;
-using boost::uuids;
+
 
 // This is a simple example of exporting a C++ function to R. You can
 // source this function into an R session using the Rcpp::sourceCpp
@@ -15,38 +18,74 @@ using boost::uuids;
 //   http://adv-r.had.co.nz/Rcpp.html
 //   http://gallery.rcpp.org/
 //
-typedef std::vector<double> double_vec;
+typedef std::vector<double> double_vec ;
+typedef std::array<double,96> spec_vec ;
 // TODO: This needs to be passed in once implemented in Cell
-static const std::array<double,4> spectrum = {.25,.25,.25,.25};
 
-
+boost::uuids::random_generator uuidgen;
+boost::mt19937 generator(2333) ;
 class Mutation{
-private:
-  std::default_random_engine generator;
-  std::discrete_distribution<int> distribution(spectrum.begin(),spectrum.end());
-
+  std::array<double,96> spectrum ;
 public:
-  int muttype;
+  int muttype ;
   boost::uuids::uuid mid;
-  Mutation(): mid(boost::uuids::random_generator()()){
-    // TODO: Pass in spectrum in a way that makes the distribution work
-    muttype = generator(dist);
-  };
+
+  // Constructor - requires a spectrum
+  Mutation(spec_vec spectrum_): spectrum(spectrum_) {
+    boost::random::discrete_distribution<int> distribution (spectrum.begin(),spectrum.end()) ;
+    int muttype = distribution(generator) ;
+    mid = uuidgen();
+  }
+
+  const boost::uuids::uuid get_mutation_id() { return mid ; }
+  const int get_muttype() { return muttype ; }
 
 
 };
 
+typedef std::vector<Mutation> mut_vec ;
 
-typedef std::vector<Mutation> mut_vec;
 
 class Cell {
-    int mutrate;
-    double reprate;
-    mut_vec mutations;
+    const int mutrate ;
+    const double bdratio ;
+    const mut_vec mutations ;
+    const spec_vec spectrum ;
   public:
-    Cell(int mutrate_, double reprate_, mut_vec mutations_):
-    mutrate(mutrate_), reprate(reprate_), mutations(mutations_){}
+    Cell(int mutrate_, double bdratio_, mut_vec mutations_, spec_vec spectrum_):
+    mutrate(mutrate_), bdratio(bdratio_), mutations(mutations_), spectrum(spectrum_){}
 
-    int get_mutrate() {return mutrate;}
-    double get_reprate() {return reprate;}
-}
+    int get_mutrate() const { return mutrate ; }
+    double get_bdratio() const {return bdratio ; }
+    mut_vec get_mutations() const { return mutations ; }
+    spec_vec get_spectrum() const { return spectrum ; }
+} ;
+
+typedef std::vector<Cell> cell_vec ;
+std::random_device device ;
+std::mt19937 gen(device()) ;
+
+// Cell replication
+const cell_vec replicate(const Cell cell) {
+  cell_vec out_cells ;
+
+  mut_vec mutations = cell.get_mutations() ;
+  int mutrate = cell.get_mutrate() ;
+  double bdratio = cell.get_bdratio() ;
+  spec_vec spectrum = cell.get_spectrum ;
+
+  double repprob = bdratio/(1 - bdratio) ; // if b/d = .72, p = .58
+  std::bernoulli_distribution flip(repprob) ;
+  bool rep = flip(gen) ;
+
+  if (rep) {
+    mut_vec mutations1, mutations2;
+    for ( int i = 1; i < mutrate; i++) {
+      mutations1.append(new Mutation(spectrum)) ;
+      mutations2.append(new Mutation(spectrum)) ;
+    }
+    Cell new1 = Cell(mutrate, bdratio, mutations1) ;
+    Cell new2 = Cell(mutrate, bdration, mutations2) ;
+  }
+} ;
+
